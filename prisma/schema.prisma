@@ -1,0 +1,75 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Base de données robuste pour le e-commerce
+  url      = env("DATABASE_URL")
+}
+
+// 1. Définition stricte des rôles (Cybersécurité & Accès)
+enum Role {
+  GUEST
+  CLIENT
+  MANAGER
+  ADMIN
+}
+
+// 2. Utilisateurs (Clients, Managers, Admins)
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  password       String   // Sera haché en base de données
+  role           Role     @default(GUEST)
+  createdAt      DateTime @default(now())
+
+  // Relation Manager -> Magasin : Un manager est restreint à sa propre boutique
+  managedStoreId String?
+  managedStore   Store?   @relation("StoreManagers", fields: [managedStoreId], references: [id])
+
+  orders         Order[]
+}
+
+// 3. Boutiques (Magasins physiques pour le Click & Collect)
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  isActive  Boolean  @default(true)
+  
+  managers  User[]    @relation("StoreManagers")
+  products  Product[]
+  orders    Order[]
+}
+
+// 4. Produits (Fruits découpés, Smoothies)
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Float    
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+
+  // Chaque produit appartient au catalogue d'un magasin spécifique
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+}
+
+// 5. Commandes (Achat ponctuel ou Abonnement)
+model Order {
+  id          String   @id @default(uuid())
+  totalAmount Float
+  status      String   @default("PENDING") // PENDING, ACCEPTED, READY, CANCELLED
+  pickupDate  DateTime // Jour J ou date ultérieure
+  isRecurring Boolean  @default(false)     // Gestion de l'abonnement
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
