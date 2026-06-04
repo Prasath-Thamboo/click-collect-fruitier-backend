@@ -16,9 +16,15 @@ app.get('/', (req, res) => {
   res.json({ message: "Bienvenue sur l'API FruityCollect 🍎🥤" });
 });
 
-// Import et utilisation des routes d'authentification
 const authRoutes = require('./routes/auth.routes');
+const storeRoutes = require('./routes/store.routes');
+const productRoutes = require('./routes/product.routes');
+const orderRoutes = require('./routes/order.routes');
+
 app.use('/api/auth', authRoutes);
+app.use('/api/stores', storeRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Lancement du serveur
 app.listen(PORT, () => {
