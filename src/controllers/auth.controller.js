@@ -21,7 +21,7 @@ exports.register = async (req, res) => {
       data: {
         email,
         password: hashedPassword,
-        role: role || 'CLIENT',
+        role: 'CLIENT',
       },
     });
 
@@ -67,7 +67,7 @@ exports.login = async (req, res) => {
     res.status(200).json({
       message: "Connexion réussie !",
       token,
-      user: { id: user.id, email: user.email, role: user.role }
+      user: { id: user.id, email: user.email, role: user.role, storeId: user.managedStoreId }
     });
 
   } catch (error) {

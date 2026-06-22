@@ -10,7 +10,11 @@ exports.getOrders = async (req, res) => {
 
     const orders = await prisma.order.findMany({
       where,
-      include: { user: { select: { id: true, email: true } }, store: true },
+      include: {
+        user: { select: { id: true, email: true } },
+        store: true,
+        items: { include: { product: { select: { id: true, name: true } } } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
@@ -23,7 +27,11 @@ exports.getOrder = async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
-      include: { user: { select: { id: true, email: true } }, store: true },
+      include: {
+        user: { select: { id: true, email: true } },
+        store: true,
+        items: { include: { product: { select: { id: true, name: true } } } },
+      },
     });
     if (!order) return res.status(404).json({ error: "Commande introuvable." });
 
@@ -43,7 +51,26 @@ exports.getOrder = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   try {
-    const { storeId, totalAmount, pickupDate, isRecurring } = req.body;
+    const { storeId, pickupDate, items } = req.body;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: "Le panier est vide." });
+    }
+
+    const productIds = items.map((i) => i.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, isAvailable: true },
+    });
+
+    if (products.length !== productIds.length) {
+      return res.status(400).json({ error: "Un ou plusieurs produits sont indisponibles." });
+    }
+
+    const priceMap = Object.fromEntries(products.map((p) => [p.id, p.price]));
+    const totalAmount = items.reduce(
+      (sum, item) => sum + priceMap[item.productId] * item.quantity,
+      0
+    );
 
     const order = await prisma.order.create({
       data: {
@@ -51,11 +78,23 @@ exports.createOrder = async (req, res) => {
         storeId,
         totalAmount,
         pickupDate: new Date(pickupDate),
-        isRecurring: isRecurring || false,
+        items: {
+          create: items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: priceMap[item.productId],
+          })),
+        },
+      },
+      include: {
+        store: true,
+        items: { include: { product: { select: { id: true, name: true } } } },
       },
     });
+
     res.status(201).json(order);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Erreur serveur." });
   }
 };

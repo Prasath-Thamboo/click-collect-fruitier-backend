@@ -3,7 +3,9 @@ const prisma = new PrismaClient();
 
 exports.getStores = async (req, res) => {
   try {
-    const stores = await prisma.store.findMany({ where: { isActive: true } });
+    const where = {};
+    if (!req.user || req.user.role !== 'ADMIN') where.isActive = true;
+    const stores = await prisma.store.findMany({ where, orderBy: { name: 'asc' } });
     res.json(stores);
   } catch (error) {
     res.status(500).json({ error: "Erreur serveur." });

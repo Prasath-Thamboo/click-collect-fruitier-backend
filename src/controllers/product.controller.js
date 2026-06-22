@@ -4,9 +4,23 @@ const prisma = new PrismaClient();
 exports.getProducts = async (req, res) => {
   try {
     const { storeId } = req.query;
-    const where = { isAvailable: true };
-    if (storeId) where.storeId = storeId;
-    const products = await prisma.product.findMany({ where });
+    const where = {};
+
+    if (!req.user || (req.user.role !== 'MANAGER' && req.user.role !== 'ADMIN')) {
+      where.isAvailable = true;
+    }
+
+    if (req.user?.role === 'MANAGER') {
+      where.storeId = req.user.storeId;
+    } else if (storeId) {
+      where.storeId = storeId;
+    }
+
+    const products = await prisma.product.findMany({
+      where,
+      include: { store: { select: { id: true, name: true } } },
+      orderBy: { name: 'asc' },
+    });
     res.json(products);
   } catch (error) {
     res.status(500).json({ error: "Erreur serveur." });

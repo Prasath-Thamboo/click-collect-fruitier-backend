@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/product.controller');
-const { verifyToken, isManagerOrAdmin } = require('../middlewares/auth.middlewares');
+const { verifyToken, isManagerOrAdmin, optionalAuth } = require('../middlewares/auth.middlewares');
 
-router.get('/', productController.getProducts);
+router.get('/', optionalAuth, productController.getProducts);
 router.get('/:id', productController.getProduct);
 router.post('/', verifyToken, isManagerOrAdmin, productController.createProduct);
 router.put('/:id', verifyToken, isManagerOrAdmin, productController.updateProduct);
