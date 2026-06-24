@@ -19,7 +19,8 @@
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "js-cookie": "^3.0.5",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
     "@types/js-cookie": "^3.0.6",
