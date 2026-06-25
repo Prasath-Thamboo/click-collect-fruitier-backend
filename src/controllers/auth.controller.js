@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 // POST /api/auth/register
 exports.register = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, managerCode } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email et mot de passe requis." });
@@ -27,6 +27,30 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: "Cet email est déjà utilisé." });
     }
 
+    let role = 'CLIENT';
+    let managedStoreId = null;
+    let inviteId = null;
+
+    if (managerCode) {
+      const invite = await prisma.managerInvite.findUnique({
+        where: { code: managerCode.trim().toUpperCase() },
+      });
+
+      if (!invite) {
+        return res.status(400).json({ error: "Code d'invitation invalide.", code: "INVALID_MANAGER_CODE" });
+      }
+      if (invite.usedAt) {
+        return res.status(400).json({ error: "Ce code a déjà été utilisé.", code: "INVALID_MANAGER_CODE" });
+      }
+      if (invite.expiresAt && invite.expiresAt < new Date()) {
+        return res.status(400).json({ error: "Ce code a expiré.", code: "INVALID_MANAGER_CODE" });
+      }
+
+      role = 'MANAGER';
+      managedStoreId = invite.storeId;
+      inviteId = invite.id;
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
@@ -35,11 +59,19 @@ exports.register = async (req, res) => {
       data: {
         email,
         password: hashedPassword,
-        role: 'CLIENT',
+        role,
+        managedStoreId,
         emailVerificationToken: verificationToken,
         emailVerificationExpiry: verificationExpiry,
       },
     });
+
+    if (inviteId) {
+      await prisma.managerInvite.update({
+        where: { id: inviteId },
+        data: { usedAt: new Date() },
+      });
+    }
 
     await sendVerificationEmail(email, verificationToken);
 

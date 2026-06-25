@@ -43,10 +43,22 @@ model Store {
   name      String
   address   String
   isActive  Boolean  @default(true)
-  
-  managers  User[]    @relation("StoreManagers")
-  products  Product[]
-  orders    Order[]
+
+  managers        User[]          @relation("StoreManagers")
+  products        Product[]
+  orders          Order[]
+  managerInvites  ManagerInvite[]
+}
+
+// 7. Codes d'invitation manager (générés par l'admin)
+model ManagerInvite {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  storeId   String
+  store     Store     @relation(fields: [storeId], references: [id])
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
 }
 
 // 4. Produits (Fruits découpés, Smoothies)
