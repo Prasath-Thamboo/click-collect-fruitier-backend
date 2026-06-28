@@ -7,8 +7,34 @@ const { startScheduler } = require('./scheduler');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(helmet());
-app.use(cors());
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Autoriser les requêtes sans origin (Postman, mobile, etc.)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin non autorisée : ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// CORS avant Helmet pour que les headers CORS soient toujours présents
+app.use(cors(corsOptions));
+
+app.use(helmet({
+  // Helmet v5+ active cross-origin-resource-policy: same-origin par défaut,
+  // ce qui bloque les lectures cross-origin même si CORS les autorise.
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // Webhook Stripe — raw body required, must be registered BEFORE express.json()
 const webhookRoutes = require('./routes/webhook.routes');
@@ -39,6 +65,13 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+
+// Error handler global — doit être après toutes les routes
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('Erreur non gérée :', err);
+  res.status(err.status || 500).json({ error: err.message || 'Erreur serveur.' });
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
