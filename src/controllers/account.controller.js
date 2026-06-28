@@ -1,11 +1,9 @@
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const { validatePassword } = require('../utils/password.utils');
 const { sendVerificationEmail } = require('../services/email.service');
-
-const prisma = new PrismaClient();
+const { prisma } = require('../lib/prisma');
 
 // GET /api/account — données personnelles de l'utilisateur connecté
 exports.getAccount = async (req, res) => {

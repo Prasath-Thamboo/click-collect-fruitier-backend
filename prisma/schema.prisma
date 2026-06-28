@@ -31,10 +31,13 @@ model User {
   passwordResetToken      String?
   passwordResetExpiry     DateTime?
 
+  stripeCustomerId String?
+
   managedStoreId String?
   managedStore   Store?   @relation("StoreManagers", fields: [managedStoreId], references: [id])
 
-  orders         Order[]
+  orders        Order[]
+  subscriptions Subscription[]
 }
 
 // 3. Boutiques (Magasins physiques pour le Click & Collect)
@@ -47,6 +50,7 @@ model Store {
   managers        User[]          @relation("StoreManagers")
   products        Product[]
   orders          Order[]
+  subscriptions   Subscription[]
   managerInvites  ManagerInvite[]
 }
 
@@ -70,10 +74,10 @@ model Product {
   imageUrl    String?
   isAvailable Boolean  @default(true)
 
-  // Chaque produit appartient au catalogue d'un magasin spécifique
-  storeId     String
-  store       Store       @relation(fields: [storeId], references: [id])
-  orderItems  OrderItem[]
+  storeId           String
+  store             Store              @relation(fields: [storeId], references: [id])
+  orderItems        OrderItem[]
+  subscriptionItems SubscriptionItem[]
 }
 
 // 5. Commandes (Achat ponctuel ou Abonnement)
@@ -81,16 +85,58 @@ model Order {
   id          String      @id @default(uuid())
   totalAmount Float
   status      String      @default("PENDING") // PENDING, ACCEPTED, READY, CANCELLED
-  pickupDate  DateTime    // Jour J ou date ultérieure
-  isRecurring Boolean     @default(false)     // Gestion de l'abonnement
+  pickupDate  DateTime
+  isRecurring Boolean     @default(false)
 
-  userId      String
-  user        User        @relation(fields: [userId], references: [id])
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id])
   storeId     String
-  store       Store       @relation(fields: [storeId], references: [id])
+  store       Store        @relation(fields: [storeId], references: [id])
   items       OrderItem[]
 
+  guestEmail  String?
+  guestPhone  String?
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
   createdAt   DateTime    @default(now())
+}
+
+// 8. Abonnements récurrents
+model Subscription {
+  id                   String                 @id @default(uuid())
+  userId               String
+  user                 User                   @relation(fields: [userId], references: [id])
+  storeId              String
+  store                Store                  @relation(fields: [storeId], references: [id])
+  status               String                 @default("ACTIVE") // ACTIVE, PAUSED, CANCELLED
+  monthlyAmount        Float
+  discountPercent      Float                  @default(15)
+  stripeSubscriptionId String?                @unique
+  stripeCustomerId     String?
+  items                SubscriptionItem[]
+  schedules            SubscriptionSchedule[]
+  orders               Order[]
+  createdAt            DateTime               @default(now())
+}
+
+model SubscriptionItem {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id])
+  quantity       Int
+  unitPrice      Float
+}
+
+model SubscriptionSchedule {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  dayOfWeek      Int
+  pickupTime     String
 }
 
 // 6. Lignes de commande (détail du panier)

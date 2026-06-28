@@ -20,7 +20,9 @@
     "helmet": "^8.1.0",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^9.0.1"
+    "node-cron": "^4.5.0",
+    "nodemailer": "^9.0.1",
+    "stripe": "^22.3.0"
   },
   "devDependencies": {
     "@types/js-cookie": "^3.0.6",

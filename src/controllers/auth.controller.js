@@ -1,12 +1,10 @@
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const { validatePassword } = require('../utils/password.utils');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email.service');
-
-const prisma = new PrismaClient();
+const { prisma, withRetry } = require('../lib/prisma');
 
 // POST /api/auth/register
 exports.register = async (req, res) => {
@@ -156,7 +154,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: "Email et mot de passe requis." });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await withRetry(() => prisma.user.findUnique({ where: { email } }));
     if (!user) {
       return res.status(401).json({ error: "Email ou mot de passe incorrect." });
     }

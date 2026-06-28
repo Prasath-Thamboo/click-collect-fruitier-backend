@@ -1,5 +1,8 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const Stripe = require('stripe');
+const { sendOrderConfirmation } = require('../services/email.service');
+const { prisma } = require('../lib/prisma');
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 exports.getOrders = async (req, res) => {
   try {
@@ -51,7 +54,23 @@ exports.getOrder = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   try {
-    const { storeId, pickupDate, items } = req.body;
+    const { storeId, pickupDate, items, guestEmail, guestPhone, paymentIntentId } = req.body;
+
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: "Paiement requis pour valider la commande." });
+    }
+
+    // Verify payment succeeded
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(402).json({ error: "Le paiement n'a pas été validé." });
+    }
+
+    if (!req.user) {
+      if (!guestEmail || !guestPhone) {
+        return res.status(400).json({ error: "Email et numéro de téléphone requis pour commander sans compte." });
+      }
+    }
 
     if (!items || items.length === 0) {
       return res.status(400).json({ error: "Le panier est vide." });
@@ -72,9 +91,17 @@ exports.createOrder = async (req, res) => {
       0
     );
 
+    // Verify amount matches what was charged (tolerance for floating point)
+    const expectedCents = Math.round(totalAmount * 100);
+    if (Math.abs(paymentIntent.amount_received - expectedCents) > 1) {
+      return res.status(400).json({ error: "Incohérence entre le montant payé et le total du panier." });
+    }
+
     const order = await prisma.order.create({
       data: {
-        userId: req.user.userId,
+        userId: req.user ? req.user.userId : null,
+        guestEmail: req.user ? null : guestEmail,
+        guestPhone: req.user ? null : guestPhone,
         storeId,
         totalAmount,
         pickupDate: new Date(pickupDate),
@@ -91,6 +118,24 @@ exports.createOrder = async (req, res) => {
         items: { include: { product: { select: { id: true, name: true } } } },
       },
     });
+
+    // Send confirmation email
+    let recipientEmail = guestEmail;
+    if (req.user) {
+      const userRecord = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { email: true },
+      });
+      recipientEmail = userRecord?.email;
+    }
+    if (recipientEmail) {
+      sendOrderConfirmation(recipientEmail, {
+        orderItems: order.items,
+        storeName: order.store.name,
+        pickupDate: order.pickupDate,
+        totalAmount: order.totalAmount,
+      }).catch((err) => console.error('Email confirmation error:', err));
+    }
 
     res.status(201).json(order);
   } catch (error) {

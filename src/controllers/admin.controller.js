@@ -1,7 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
-
-const prisma = new PrismaClient();
+const { prisma } = require('../lib/prisma');
 
 // POST /api/admin/invites — crée un code d'invitation manager pour un store
 exports.createInvite = async (req, res) => {
