@@ -24,18 +24,23 @@ exports.createUser = async (req, res) => {
   try {
     const { email, password, role, storeId } = req.body;
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) return res.status(400).json({ error: "Cet email est déjà utilisé." });
+    if (!email || !password) return res.status(400).json({ error: "Email et mot de passe requis." });
 
     const allowedRoles = ['CLIENT', 'MANAGER', 'ADMIN'];
     if (!allowedRoles.includes(role)) return res.status(400).json({ error: "Rôle invalide." });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) return res.status(400).json({ error: "Cet email est déjà utilisé." });
+
+    const hashedPassword = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
-        role: role || 'CLIENT',
+        role,
+        // Compte créé par un admin : l'e-mail est considéré vérifié,
+        // sinon l'utilisateur ne pourrait jamais se connecter (login bloque si non vérifié).
+        isEmailVerified: true,
         managedStoreId: role === 'MANAGER' ? (storeId || null) : null,
       },
       select: {
@@ -48,6 +53,7 @@ exports.createUser = async (req, res) => {
     });
     res.status(201).json(user);
   } catch (error) {
+    console.error('Erreur createUser :', error);
     res.status(500).json({ error: "Erreur serveur." });
   }
 };

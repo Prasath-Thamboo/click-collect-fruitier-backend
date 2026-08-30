@@ -1,9 +1,12 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const Stripe = require('stripe');
 
 const { validatePassword } = require('../utils/password.utils');
 const { sendVerificationEmail } = require('../services/email.service');
 const { prisma } = require('../lib/prisma');
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // GET /api/account — données personnelles de l'utilisateur connecté
 exports.getAccount = async (req, res) => {
@@ -163,20 +166,42 @@ exports.deleteAccount = async (req, res) => {
     if (!password) return res.status(400).json({ error: 'Mot de passe requis pour confirmer la suppression.' });
 
     const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Mot de passe incorrect.' });
 
-    // Supprimer dans l'ordre pour respecter les contraintes de clés étrangères
-    const orders = await prisma.order.findMany({ where: { userId: req.user.userId }, select: { id: true } });
-    const orderIds = orders.map((o) => o.id);
+    // Annuler les abonnements Stripe encore actifs pour stopper la facturation
+    const subscriptions = await prisma.subscription.findMany({
+      where: { userId: user.id },
+      select: { id: true, stripeSubscriptionId: true, status: true },
+    });
+    for (const sub of subscriptions) {
+      if (sub.stripeSubscriptionId && sub.status !== 'CANCELLED') {
+        try {
+          await stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+        } catch (err) {
+          console.error(`deleteAccount: échec annulation Stripe ${sub.stripeSubscriptionId} :`, err.message);
+        }
+      }
+    }
 
-    await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-    await prisma.order.deleteMany({ where: { userId: req.user.userId } });
-    await prisma.managerInvite.deleteMany({ where: { storeId: user.managedStoreId ?? undefined } });
-    await prisma.user.delete({ where: { id: req.user.userId } });
+    const orders = await prisma.order.findMany({ where: { userId: user.id }, select: { id: true } });
+    const orderIds = orders.map((o) => o.id);
+    const subscriptionIds = subscriptions.map((s) => s.id);
+
+    // Supprimer dans l'ordre pour respecter les contraintes de clés étrangères.
+    // SubscriptionItem / SubscriptionSchedule partent en cascade avec la Subscription.
+    await prisma.$transaction([
+      prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } }),
+      prisma.order.deleteMany({ where: { userId: user.id } }),
+      prisma.subscription.deleteMany({ where: { id: { in: subscriptionIds } } }),
+      prisma.user.delete({ where: { id: user.id } }),
+    ]);
 
     res.json({ message: 'Votre compte et toutes vos données ont été supprimés.' });
-  } catch {
+  } catch (error) {
+    console.error('Erreur deleteAccount :', error);
     res.status(500).json({ error: 'Erreur serveur.' });
   }
 };
